@@ -3,7 +3,7 @@ const windows = std.os.windows;
 const DWORD = windows.DWORD;
 const ULONG_PTR = windows.ULONG_PTR;
 const LONG = windows.LONG;
-const CHAR = windows.CHAR;
+const WCHAR = windows.WCHAR;
 const MAX_PATH = windows.MAX_PATH;
 const BOOL = windows.BOOL;
 const WINAPI = windows.WINAPI;
@@ -11,7 +11,7 @@ const HANDLE = windows.HANDLE;
 const LPVOID = windows.LPVOID;
 const SIZE_T = windows.SIZE_T;
 
-pub const PROCESSENTRY32 = struct {
+pub const PROCESSENTRY32W = extern struct {
     dwSize: DWORD,
     cntUsage: DWORD,
     th32ProcessID: DWORD,
@@ -21,17 +21,17 @@ pub const PROCESSENTRY32 = struct {
     th32ParentProcessID: DWORD,
     pcPriClassBase: LONG,
     dwFlags: DWORD,
-    szExeFile: [MAX_PATH]CHAR,
+    szExeFile: [MAX_PATH]WCHAR,
 };
 
-pub extern "kernel32" fn Process32First(
+pub extern "kernel32" fn Process32FirstW(
     hSnapshot: HANDLE,
-    lppe: ?*PROCESSENTRY32,
+    lppe: ?*PROCESSENTRY32W,
 ) callconv(WINAPI) BOOL;
 
-pub extern "kernel32" fn Process32Next(
+pub extern "kernel32" fn Process32NextW(
     hSnapshot: HANDLE,
-    lppe: ?*PROCESSENTRY32,
+    lppe: ?*PROCESSENTRY32W,
 ) callconv(WINAPI) BOOL;
 
 pub extern "kernel32" fn VirtualAllocEx(

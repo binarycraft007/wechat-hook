@@ -112,18 +112,12 @@ pub fn closeProcess(self: *DllInjector) !void {
             windows.FALSE,
             process_id,
         );
-        if (handle == windows.INVALID_HANDLE_VALUE) {
-            switch (windows.kernel32.GetLastError()) {
-                else => |err| return windows.unexpectedError(err),
-            }
-        }
-        defer windows.CloseHandle(process_handle);
-
         if (process_handle == windows.INVALID_HANDLE_VALUE) {
             switch (windows.kernel32.GetLastError()) {
                 else => |err| return windows.unexpectedError(err),
             }
         }
+        defer windows.CloseHandle(process_handle);
 
         try windows.TerminateProcess(process_handle, 0);
     }

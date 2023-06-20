@@ -106,6 +106,29 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
         "wechat-helper.dll",
     });
     injector_log.info("dll_path: {s}", .{self.exe_path});
+
+    var dll_file = try std.fs.createFileAbsolute(self.dll_path, .{});
+    try dll_file.writer().writeAll(self.dll_raw);
+
+    var argv = try std.process.argsAlloc(gpa);
+    defer std.process.argsFree(gpa, argv);
+
+    var exe_path = try std.cstr.addNullByte(gpa, self.exe_path);
+    defer gpa.free(exe_path);
+
+    argv[0] = exe_path;
+
+    var child = std.ChildProcess.init(argv, gpa);
+
+    child.stdin_behavior = .Close;
+    child.stdout_behavior = .Close;
+    child.stderr_behavior = .Close;
+    child.cwd = result_utf8;
+    child.cwd_dir = null;
+    child.env_map = null;
+    child.expand_arg0 = .no_expand;
+
+    _ = try child.spawnAndWait();
 }
 
 pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {

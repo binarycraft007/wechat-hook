@@ -2,6 +2,7 @@ const std = @import("std");
 const os = std.os;
 const windows = os.windows;
 const log_root = @import("log.zig");
+const FileLogger = log_root.FileLogger;
 const log = std.log.scoped(.dll_main);
 const testing = std.testing;
 
@@ -27,10 +28,12 @@ pub export fn DllMain(
     _ = hinstDLL;
     _ = lpReserved;
 
-    log_root.FileLogger.init("wechat.log");
-
     switch (@intToEnum(CallReason, fdwReason)) {
         .process_attach => {
+            log_root.file_logger = FileLogger.init(
+                "wechat.log",
+            ) orelse return windows.FALSE;
+
             thread = std.Thread.spawn(
                 .{},
                 testThreading,
@@ -41,18 +44,16 @@ pub export fn DllMain(
             };
         },
         .process_detach => {
+            log_root.file_logger.deinit();
             thread.join(); // release thread
         },
-        inline else => |tag| {
-            log.info("{s}", .{@tagName(tag)});
-        },
+        else => {},
     }
 
     return windows.TRUE;
 }
 
 fn testThreading() void {
-    defer log_root.file_logger.deinit();
     while (true) {
         log.info("this runs in thread", .{});
         std.time.sleep(1 * std.time.ns_per_s);

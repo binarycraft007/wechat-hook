@@ -17,4 +17,5 @@ pub fn main() !void {
 
     try injector.closeProcess(arena.allocator());
     try injector.startProcess(arena.allocator());
+    try injector.inject(arena.allocator());
 }

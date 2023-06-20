@@ -4,12 +4,12 @@ var file_logger: FileLogger = undefined;
 
 pub const FileLogger = struct {
     name: []const u8,
-    atomic_file: std.fs.AtomicFile,
+    file: std.fs.File,
 
     pub fn init(name: []const u8) void {
         file_logger = .{
             .name = name,
-            .atomic_file = std.fs.cwd().atomicFile(name, .{}) catch return,
+            .file = std.fs.cwd().createFile(name, .{}) catch return,
         };
     }
 };
@@ -22,6 +22,5 @@ pub fn logFn(
 ) void {
     const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
-    const log_writer = file_logger.atomic_file.file.writer();
-    log_writer.print(prefix ++ format, args) catch return;
+    file_logger.file.writer().print(prefix ++ format, args) catch return;
 }

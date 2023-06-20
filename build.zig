@@ -4,12 +4,18 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    var winapi_module = b.addModule(
+        "winapi",
+        .{ .source_file = .{ .path = "lib/winapi.zig" } },
+    );
+
     const lib = b.addSharedLibrary(.{
         .name = "wechat-hook",
         .root_source_file = .{ .path = "src/dll/main.zig" },
         .target = target,
         .optimize = optimize,
     });
+    lib.linkLibC();
     b.installArtifact(lib);
 
     const exe = b.addExecutable(.{
@@ -18,6 +24,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe.addModule("winapi", winapi_module);
     exe.addAnonymousModule("wechat_hook", .{
         .source_file = lib.getOutputSource(),
     });

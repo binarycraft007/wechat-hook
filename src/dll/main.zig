@@ -16,7 +16,7 @@ pub const std_options = struct {
     pub const logFn = log_root.logFn;
 };
 
-pub fn DllMain(
+pub export fn DllMain(
     hinstDLL: windows.HINSTANCE,
     fdwReason: windows.DWORD,
     lpReserved: windows.LPVOID,

@@ -126,10 +126,13 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 }
 
 pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
+    var dll_path = try std.cstr.addNullByte(gpa, self.dll_path);
+    defer gpa.free(dll_path);
+
     const mem_ptr = winapi.VirtualAllocEx(
         self.proc_info.hProcess,
         null,
-        self.dll_path.len,
+        dll_path.len,
         windows.MEM_COMMIT,
         windows.PAGE_READWRITE,
     ) orelse switch (windows.kernel32.GetLastError()) {
@@ -141,9 +144,6 @@ pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
         0,
         windows.MEM_RELEASE,
     );
-
-    var dll_path = try std.cstr.addNullByte(gpa, self.dll_path);
-    defer gpa.free(dll_path);
 
     const len = try windows.WriteProcessMemory(
         self.proc_info.hProcess,

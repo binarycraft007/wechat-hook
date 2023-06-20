@@ -92,6 +92,7 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 
     self.dll_path = try std.fs.path.join(gpa, &[_][]const u8{
         result_utf8,
+        "[3.7.0.30]",
         "wechat-helper.dll",
     });
     log.info("dll_path: {s}", .{self.dll_path});
@@ -101,29 +102,24 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 
     try dll_file.writer().writeAll(self.dll_raw);
 
-    var argv = try std.process.argsAlloc(gpa);
-    defer std.process.argsFree(gpa, argv);
-
     var exe_path = try unicode.utf8ToUtf16LeWithNull(gpa, self.exe_path);
     defer gpa.free(exe_path);
 
-    var app_name = try unicode.utf8ToUtf16LeWithNull(gpa, "WeChat.exe");
-    defer gpa.free(app_name);
-
-    var startup_info: windows.STARTUPINFOW = undefined;
+    var startup_info = mem.zeroInit(windows.STARTUPINFOW, .{
+        .cb = @sizeOf(windows.STARTUPINFOW),
+        .dwFlags = windows.STARTF_USESHOWWINDOW,
+        .wShowWindow = windows.user32.SW_SHOW,
+    });
 
     try windows.CreateProcessW(
-        app_name,
+        null,
         exe_path,
         null,
         null,
         windows.FALSE,
         winapi.CREATE_SUSPENDED,
         null,
-        @ptrCast(
-            [*:0]u16,
-            @alignCast(@alignOf([*:0]u16), result.ptr),
-        ),
+        null,
         &startup_info,
         &self.proc_info,
     );
@@ -233,9 +229,7 @@ pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 }
 
 pub fn deinit(self: *DllInjector, gpa: mem.Allocator) void {
-    windows.TerminateProcess(self.proc_info.hProcess, 0) catch |err| {
-        log.err("kill child process: {}", .{err});
-    };
+    windows.CloseHandle(self.proc_info.hProcess);
     gpa.free(self.exe_path);
     gpa.free(self.dll_path);
     self.* = undefined;

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-var file_logger: FileLogger = undefined;
+pub var file_logger: FileLogger = undefined;
 
 pub const FileLogger = struct {
     name: []const u8,
@@ -9,8 +9,14 @@ pub const FileLogger = struct {
     pub fn init(name: []const u8) void {
         file_logger = .{
             .name = name,
-            .file = std.fs.cwd().createFile(name, .{}) catch return,
+            .file = std.fs.cwd().createFile(name, .{ .truncate = false }) catch {
+                return;
+            },
         };
+    }
+
+    pub fn deinit(self: *FileLogger) void {
+        self.file.close();
     }
 };
 
@@ -22,5 +28,7 @@ pub fn logFn(
 ) void {
     const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
-    file_logger.file.writer().print(prefix ++ format, args) catch return;
+    file_logger.file.writer().print(prefix ++ format ++ "\n", args) catch {
+        return;
+    };
 }

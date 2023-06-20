@@ -12,7 +12,7 @@ reg_value: []const u8,
 dll_raw: []const u8,
 exe_path: []const u8,
 dll_path: []const u8,
-child_process: std.ChildProcess,
+proc_info: windows.PROCESS_INFORMATION,
 
 const DllInjector = @This();
 
@@ -29,7 +29,7 @@ pub fn init(options: InitOptions) DllInjector {
         .reg_key = options.reg_key,
         .reg_value = options.reg_value,
         .dll_raw = options.dll_raw,
-        .child_process = undefined,
+        .proc_info = undefined,
         .exe_path = "",
         .dll_path = "",
     };
@@ -104,27 +104,34 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
     var argv = try std.process.argsAlloc(gpa);
     defer std.process.argsFree(gpa, argv);
 
-    var exe_path = try std.cstr.addNullByte(gpa, self.exe_path);
+    var exe_path = try unicode.utf8ToUtf16LeWithNull(gpa, self.exe_path);
     defer gpa.free(exe_path);
 
-    argv[0] = exe_path;
+    var app_name = try unicode.utf8ToUtf16LeWithNull(gpa, "WeChat.exe");
+    defer gpa.free(app_name);
 
-    self.child_process = std.ChildProcess.init(argv, gpa);
+    var startup_info: windows.STARTUPINFOW = undefined;
 
-    self.child_process.stdin_behavior = .Close;
-    self.child_process.stdout_behavior = .Close;
-    self.child_process.stderr_behavior = .Close;
-    self.child_process.cwd = result_utf8;
-    self.child_process.cwd_dir = null;
-    self.child_process.env_map = null;
-    self.child_process.expand_arg0 = .no_expand;
-
-    try self.child_process.spawn();
+    try windows.CreateProcessW(
+        app_name,
+        exe_path,
+        null,
+        null,
+        windows.FALSE,
+        winapi.CREATE_SUSPENDED,
+        null,
+        @ptrCast(
+            [*:0]u16,
+            @alignCast(@alignOf([*:0]u16), result.ptr),
+        ),
+        &startup_info,
+        &self.proc_info,
+    );
 }
 
 pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
     const mem_ptr = winapi.VirtualAllocEx(
-        self.child_process.id,
+        self.proc_info.hProcess,
         null,
         self.dll_path.len,
         windows.MEM_COMMIT,
@@ -132,12 +139,18 @@ pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
     ) orelse switch (windows.kernel32.GetLastError()) {
         else => |err| return windows.unexpectedError(err),
     };
+    defer _ = winapi.VirtualFreeEx(
+        self.proc_info.hProcess,
+        mem_ptr,
+        0,
+        windows.MEM_RELEASE,
+    );
 
     var dll_path = try std.cstr.addNullByte(gpa, self.dll_path);
     defer gpa.free(dll_path);
 
     const len = try windows.WriteProcessMemory(
-        self.child_process.id,
+        self.proc_info.hProcess,
         mem_ptr,
         dll_path,
     );
@@ -151,8 +164,8 @@ pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
         "LoadLibraryA",
     ) orelse return error.LookupLoadLibrary;
 
-    _ = winapi.CreateRemoteThread(
-        self.child_process.id,
+    var thread_handle = winapi.CreateRemoteThread(
+        self.proc_info.hProcess,
         null,
         0,
         loadLibrary,
@@ -163,6 +176,9 @@ pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
         else => |err| return windows.unexpectedError(err),
     };
     log.info("{s} injection success!", .{self.dll_path});
+
+    _ = windows.kernel32.WaitForSingleObject(thread_handle, 4000);
+    _ = winapi.ResumeThread(self.proc_info.hThread);
 }
 
 pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {
@@ -217,7 +233,7 @@ pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 }
 
 pub fn deinit(self: *DllInjector, gpa: mem.Allocator) void {
-    _ = self.child_process.kill() catch |err| {
+    windows.TerminateProcess(self.proc_info.hProcess, 0) catch |err| {
         log.err("kill child process: {}", .{err});
     };
     gpa.free(self.exe_path);

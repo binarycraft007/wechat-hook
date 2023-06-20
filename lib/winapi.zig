@@ -45,6 +45,13 @@ pub extern "kernel32" fn VirtualAllocEx(
     flProtect: DWORD,
 ) callconv(WINAPI) ?LPVOID;
 
+pub extern "kernel32" fn VirtualFreeEx(
+    hProcess: HANDLE,
+    lpAddress: LPVOID,
+    dwSize: SIZE_T,
+    dwFreeType: DWORD,
+) callconv(WINAPI) BOOL;
+
 pub extern "kernel32" fn OpenProcess(
     dwDesiredAccess: DWORD,
     bInheritHandle: BOOL,
@@ -60,6 +67,10 @@ pub extern "kernel32" fn CreateRemoteThread(
     dwCreationFlags: DWORD,
     lpThreadId: ?*DWORD,
 ) callconv(WINAPI) ?HANDLE;
+
+pub extern "kernel32" fn ResumeThread(
+    hThread: HANDLE,
+) callconv(WINAPI) DWORD;
 
 pub const PROCESS_TERMINATE = 0x0001;
 pub const PROCESS_CREATE_THREAD = 0x0002;
@@ -82,3 +93,5 @@ pub const HKEY_USERS = @intToPtr(HKEY, 0x80000003);
 pub const HKEY_PERFORMANCE_DATA = @intToPtr(HKEY, 0x80000004);
 pub const HKEY_PERFORMANCE_TEXT = @intToPtr(HKEY, 0x80000050);
 pub const HKEY_PERFORMANCE_NLSTEXT = @intToPtr(HKEY, 0x80000060);
+
+pub const CREATE_SUSPENDED = 0x4;

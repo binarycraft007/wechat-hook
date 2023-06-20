@@ -146,9 +146,9 @@ pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
     var loader = try std.DynLib.open("kernel32.dll");
     defer loader.close();
 
-    var loadLibrary = loader.lookup(
+    const loadLibrary = loader.lookup(
         windows.LPTHREAD_START_ROUTINE,
-        "LoaderLibraryW",
+        "LoadLibraryA",
     ) orelse return error.LookupLoadLibrary;
 
     _ = winapi.CreateRemoteThread(

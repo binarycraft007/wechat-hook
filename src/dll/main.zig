@@ -39,11 +39,8 @@ pub export fn DllMain(
             wechat = WeChat.init(.{
                 .gpa = std.heap.c_allocator,
                 .dll_name = "WeChatWin.dll",
-                .sendmsg_offset = 0x521D30,
-            }) catch |err| {
-                log.err("init wechat {}", .{err});
-                return windows.FALSE;
-            };
+                .off_sets = .{ .send_msg = 0x521D30 },
+            });
 
             thread = std.Thread.spawn(
                 .{},

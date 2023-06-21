@@ -3,11 +3,13 @@ const mem = std.mem;
 const windows = std.os.windows;
 
 gpa: mem.Allocator,
-base_addr: usize,
-dll_handle: windows.HMODULE,
-sendMsgFn: SendMsgCall,
+dll_name: []const u8,
+off_sets: OffSets,
 
 const WeChat = @This();
+const OffSets = struct {
+    send_msg: usize,
+};
 
 pub const String = extern struct {
     text: [*:0]windows.WCHAR,
@@ -28,46 +30,28 @@ pub const String = extern struct {
     }
 };
 
-const SendMsgCall = *const fn (
-    at_users: [*c]const String,
-    num: usize,
-    msg: [*c]const String,
-    to_user: [*c]const String,
-    buffer: [*c]const u8,
-) callconv(.C) void;
+const FunctionCall = union(enum) {
+    send_msg: *const fn (
+        at_users: [*c]const String,
+        num: usize,
+        msg: [*c]const String,
+        to_user: [*c]const String,
+        buffer: [*c]const u8,
+    ) callconv(.C) void,
+};
 
 const InitOptions = struct {
     gpa: mem.Allocator,
     dll_name: []const u8,
-    sendmsg_offset: usize,
+    off_sets: OffSets,
 };
 
-pub fn init(options: InitOptions) !WeChat {
-    var dll_name = try std.unicode.utf8ToUtf16LeWithNull(
-        options.gpa,
-        options.dll_name,
-    );
-    defer options.gpa.free(dll_name);
-
-    var wechat: WeChat = .{
-        .base_addr = undefined,
-        .sendMsgFn = undefined,
+pub fn init(options: InitOptions) WeChat {
+    return .{
+        .dll_name = options.dll_name,
         .gpa = options.gpa,
-        .dll_handle = blk: {
-            if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
-                break :blk handle;
-            }
-            return error.GetWeChatWinHandle;
-        },
+        .off_sets = options.off_sets,
     };
-
-    wechat.base_addr = @ptrToInt(wechat.dll_handle);
-    wechat.sendMsgFn = @intToPtr(
-        SendMsgCall,
-        wechat.base_addr + options.sendmsg_offset,
-    );
-
-    return wechat;
 }
 
 const SendMsgOptions = struct {
@@ -78,6 +62,17 @@ const SendMsgOptions = struct {
 
 pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
     var buf: [0x3B0:0]u8 = [1:0]u8{0} ** 0x3B0;
+
+    const func_call: FunctionCall = .{
+        .send_msg = undefined,
+    };
+
+    var func_addr = try self.getFunctionAddr(func_call);
+    var func_ptr = switch (func_call) {
+        inline else => |func| blk: {
+            break :blk @intToPtr(@TypeOf(func), func_addr);
+        },
+    };
 
     var at_users = blk: {
         var list = std.ArrayList(String).init(self.gpa);
@@ -96,9 +91,31 @@ pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
     var message = try String.init(self.gpa, options.message);
     defer message.deinit(self.gpa);
 
-    self.sendMsgFn(at_users.ptr, 0x1, &message, &to_user, &buf);
+    func_ptr(at_users.ptr, 0x1, &message, &to_user, &buf);
+}
+
+fn getFunctionAddr(self: *WeChat, func_call: FunctionCall) !usize {
+    var dll_name = try std.unicode.utf8ToUtf16LeWithNull(
+        self.gpa,
+        self.dll_name,
+    );
+    defer self.gpa.free(dll_name);
+
+    var dll_handle = blk: {
+        if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
+            break :blk handle;
+        }
+        return error.GetWeChatWinHandle;
+    };
+
+    switch (func_call) {
+        inline else => |_, tag| {
+            const offset = @field(self.off_sets, @tagName(tag));
+            return @ptrToInt(dll_handle) + offset;
+        },
+    }
 }
 
 pub fn deinit(self: *WeChat) void {
-    _ = self;
+    self.* = undefined;
 }

@@ -2,6 +2,7 @@ const std = @import("std");
 const os = std.os;
 const windows = os.windows;
 const log_root = @import("log.zig");
+const WeChat = @import("WeChat.zig");
 const FileLogger = log_root.FileLogger;
 const log = std.log.scoped(.dll_main);
 const testing = std.testing;
@@ -19,6 +20,7 @@ pub const std_options = struct {
 };
 
 var thread: std.Thread = undefined;
+var wechat: WeChat = undefined;
 
 pub export fn DllMain(
     hinstDLL: windows.HINSTANCE,
@@ -34,6 +36,14 @@ pub export fn DllMain(
                 "wechat.log",
             ) orelse return windows.FALSE;
 
+            wechat = WeChat.init(.{
+                .dll_name = "WeChatWin.dll",
+                .sendmsg_offset = 0x521D30,
+            }) catch |err| {
+                log.err("init wechat {}", .{err});
+                return windows.FALSE;
+            };
+
             thread = std.Thread.spawn(
                 .{},
                 testThreading,
@@ -44,8 +54,9 @@ pub export fn DllMain(
             };
         },
         .process_detach => {
-            log_root.file_logger.deinit();
+            wechat.deinit();
             thread.join(); // release thread
+            log_root.file_logger.deinit();
         },
         else => {},
     }
@@ -54,9 +65,9 @@ pub export fn DllMain(
 }
 
 fn testThreading() void {
+    log.info("thread started in dll main", .{});
     while (true) {
-        log.info("this runs in thread", .{});
-        std.time.sleep(1 * std.time.ns_per_s);
+        std.time.sleep(120 * std.time.ns_per_s);
     }
 }
 

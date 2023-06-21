@@ -37,6 +37,7 @@ pub export fn DllMain(
             ) orelse return windows.FALSE;
 
             wechat = WeChat.init(.{
+                .gpa = std.heap.c_allocator,
                 .dll_name = "WeChatWin.dll",
                 .sendmsg_offset = 0x521D30,
             }) catch |err| {
@@ -68,6 +69,16 @@ fn testThreading() void {
     log.info("thread started in dll main", .{});
     while (true) {
         std.time.sleep(120 * std.time.ns_per_s);
+        log.info("send msg start", .{});
+        wechat.sendTextMsg(.{
+            .at_users = &[_][]const u8{""},
+            .to_user = "filehelper",
+            .message = "hello from wechat bot",
+        }) catch |err| {
+            log.err("send msg: {}", .{err});
+            continue;
+        };
+        log.info("send msg end", .{});
     }
 }
 

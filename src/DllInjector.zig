@@ -105,23 +105,6 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
     var exe_path = try unicode.utf8ToUtf16LeWithNull(gpa, self.exe_path);
     defer gpa.free(exe_path);
 
-    var wechat_win_path = try std.fs.path.join(gpa, &[_][]const u8{
-        result_utf8,
-        "[3.7.0.30]",
-        "WeChatWin.dll",
-    });
-    defer gpa.free(wechat_win_path);
-
-    var env = try mem.concat(gpa, u8, &[_][]const u8{
-        "WECHAT_WIN",
-        "=",
-        wechat_win_path,
-    });
-    defer gpa.free(env);
-
-    var env_wchar = try unicode.utf8ToUtf16LeWithNull(gpa, env);
-    defer gpa.free(env_wchar);
-
     var startup_info = mem.zeroInit(windows.STARTUPINFOW, .{
         .cb = @sizeOf(windows.STARTUPINFOW),
         .dwFlags = windows.STARTF_USESHOWWINDOW,
@@ -134,9 +117,9 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
         null,
         null,
         windows.FALSE,
-        winapi.CREATE_SUSPENDED | windows.CREATE_UNICODE_ENVIRONMENT,
+        winapi.CREATE_SUSPENDED,
         null,
-        env_wchar.ptr,
+        null,
         &startup_info,
         &self.proc_info,
     );

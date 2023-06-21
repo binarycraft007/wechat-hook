@@ -38,16 +38,23 @@ const SendMsgCall = *const fn (
 
 const InitOptions = struct {
     gpa: mem.Allocator,
-    dll_name: []const u8,
     sendmsg_offset: usize,
 };
 
 pub fn init(options: InitOptions) !WeChat {
+    var envmap = try std.process.getEnvMap(options.gpa);
+    defer envmap.deinit();
+
     var wechat: WeChat = .{
         .base_addr = undefined,
         .sendMsgFn = undefined,
         .gpa = options.gpa,
-        .dll_handle = try std.DynLib.open(options.dll_name),
+        .dll_handle = blk: {
+            if (envmap.get("WECHAT_WIN")) |wechat_win| {
+                break :blk try std.DynLib.open(wechat_win);
+            }
+            return error.GetWeChatWinPath;
+        },
     };
 
     wechat.base_addr = @ptrToInt(wechat.dll_handle.dll);

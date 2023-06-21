@@ -4,7 +4,7 @@ const windows = std.os.windows;
 
 gpa: mem.Allocator,
 base_addr: usize,
-dll_handle: std.DynLib,
+dll_handle: windows.HMODULE,
 sendMsgFn: SendMsgCall,
 
 const WeChat = @This();
@@ -43,14 +43,25 @@ const InitOptions = struct {
 };
 
 pub fn init(options: InitOptions) !WeChat {
+    var dll_name = try std.unicode.utf8ToUtf16LeWithNull(
+        options.gpa,
+        options.dll_name,
+    );
+    defer options.gpa.free(dll_name);
+
     var wechat: WeChat = .{
         .base_addr = undefined,
         .sendMsgFn = undefined,
         .gpa = options.gpa,
-        .dll_handle = try std.DynLib.open(options.dll_name),
+        .dll_handle = blk: {
+            if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
+                break :blk handle;
+            }
+            return error.GetWeChatWinHandle;
+        },
     };
 
-    wechat.base_addr = @ptrToInt(wechat.dll_handle.dll);
+    wechat.base_addr = @ptrToInt(wechat.dll_handle);
     wechat.sendMsgFn = @intToPtr(
         SendMsgCall,
         wechat.base_addr + options.sendmsg_offset,
@@ -89,5 +100,5 @@ pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
 }
 
 pub fn deinit(self: *WeChat) void {
-    self.dll_handle.close();
+    _ = self;
 }

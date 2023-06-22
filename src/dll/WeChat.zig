@@ -1,6 +1,8 @@
 const std = @import("std");
 const mem = std.mem;
+const meta = std.meta;
 const windows = std.os.windows;
+const log = std.log.scoped(.wechat);
 
 gpa: mem.Allocator,
 dll_name: []const u8,
@@ -9,6 +11,8 @@ off_sets: OffSets,
 const WeChat = @This();
 const OffSets = struct {
     send_msg: usize,
+    nick_name: usize,
+    logged_in: usize,
 };
 
 pub const String = extern struct {
@@ -20,8 +24,8 @@ pub const String = extern struct {
     pub fn init(gpa: mem.Allocator, str: []const u8) !String {
         return .{
             .text = try std.unicode.utf8ToUtf16LeWithNull(gpa, str),
-            .size = str.len + 1,
-            .capacity = (str.len + 1) * 2,
+            .size = str.len,
+            .capacity = str.len,
         };
     }
 
@@ -30,14 +34,16 @@ pub const String = extern struct {
     }
 };
 
-const FunctionCall = union(enum) {
+const PointerUnion = union(enum) {
     send_msg: *const fn (
+        buffer: [*c]const u8,
+        to_user: [*c]const String,
+        msg: [*c]const String,
         at_users: [*c]const String,
         num: usize,
-        msg: [*c]const String,
-        to_user: [*c]const String,
-        buffer: [*c]const u8,
     ) callconv(.C) void,
+    nick_name: [*:0]const u8,
+    logged_in: *bool,
 };
 
 const InitOptions = struct {
@@ -60,19 +66,17 @@ const SendMsgOptions = struct {
     message: []const u8,
 };
 
+pub fn isLoggedIn(self: *WeChat) bool {
+    var ptr = self.getPtrByTag(.{ .logged_in = undefined }) catch
+        return false;
+    return ptr.*;
+}
+
 pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
     var buf: [0x3B0:0]u8 = [1:0]u8{0} ** 0x3B0;
 
-    const func_call: FunctionCall = .{
-        .send_msg = undefined,
-    };
-
-    var func_addr = try self.getFunctionAddr(func_call);
-    var func_ptr = switch (func_call) {
-        inline else => |func| blk: {
-            break :blk @intToPtr(@TypeOf(func), func_addr);
-        },
-    };
+    var func_ptr = try self.getPtrByTag(.{ .send_msg = undefined });
+    log.info("function ptr: {p}", .{func_ptr});
 
     var at_users = blk: {
         var list = std.ArrayList(String).init(self.gpa);
@@ -91,10 +95,10 @@ pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
     var message = try String.init(self.gpa, options.message);
     defer message.deinit(self.gpa);
 
-    func_ptr(at_users.ptr, 0x1, &message, &to_user, &buf);
+    func_ptr(&buf, &to_user, &message, at_users.ptr, 0x01);
 }
 
-fn getFunctionAddr(self: *WeChat, func_call: FunctionCall) !usize {
+fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
     var dll_name = try std.unicode.utf8ToUtf16LeWithNull(
         self.gpa,
         self.dll_name,
@@ -108,12 +112,16 @@ fn getFunctionAddr(self: *WeChat, func_call: FunctionCall) !usize {
         return error.GetWeChatWinHandle;
     };
 
-    switch (func_call) {
-        inline else => |_, tag| {
+    switch (ptr) {
+        inline else => |p, tag| {
             const offset = @field(self.off_sets, @tagName(tag));
-            return @ptrToInt(dll_handle) + offset;
+            return @intToPtr(@TypeOf(p), @ptrToInt(dll_handle) + offset);
         },
     }
+}
+
+fn ActiveType(comptime u: anytype) type {
+    return meta.TagPayload(@TypeOf(u), meta.activeTag(u));
 }
 
 pub fn deinit(self: *WeChat) void {

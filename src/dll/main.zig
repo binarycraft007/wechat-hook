@@ -39,7 +39,11 @@ pub export fn DllMain(
             wechat = WeChat.init(.{
                 .gpa = std.heap.c_allocator,
                 .dll_name = "WeChatWin.dll",
-                .off_sets = .{ .send_msg = 0x521D30 },
+                .off_sets = .{
+                    .send_msg = 0x521D30,
+                    .nick_name = 0x23660F4,
+                    .logged_in = 0x2366538,
+                },
             });
 
             thread = std.Thread.spawn(
@@ -65,7 +69,9 @@ pub export fn DllMain(
 fn testThreading() void {
     log.info("thread started in dll main", .{});
     while (true) {
-        std.time.sleep(120 * std.time.ns_per_s);
+        std.time.sleep(3 * std.time.ns_per_s);
+        if (!wechat.isLoggedIn()) continue;
+
         log.info("send msg start", .{});
         wechat.sendTextMsg(.{
             .at_users = &[_][]const u8{""},

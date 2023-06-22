@@ -30,7 +30,7 @@ pub export fn DllMain(
     _ = hinstDLL;
     _ = lpReserved;
 
-    switch (@intToEnum(CallReason, fdwReason)) {
+    switch (@enumFromInt(CallReason, fdwReason)) {
         .process_attach => {
             log_root.file_logger = FileLogger.init(
                 "wechat.log",

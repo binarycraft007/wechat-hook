@@ -115,7 +115,7 @@ fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
     switch (ptr) {
         inline else => |p, tag| {
             const offset = @field(self.off_sets, @tagName(tag));
-            return @intToPtr(@TypeOf(p), @ptrToInt(dll_handle) + offset);
+            return @ptrFromInt(@TypeOf(p), @intFromPtr(dll_handle) + offset);
         },
     }
 }

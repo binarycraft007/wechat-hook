@@ -4,6 +4,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const httpz_pkg = b.dependency("httpz", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const winapi_module = b.addModule(
         "winapi",
         .{ .source_file = .{ .path = "lib/winapi.zig" } },
@@ -22,6 +27,7 @@ pub fn build(b: *std.Build) void {
             "-DWIN32_LEAN_AND_MEAN", // exclude headers
         },
     );
+    lib.addModule("httpz", httpz_pkg.module("httpz"));
     lib.linkLibCpp();
     lib.linkLibC();
     b.installArtifact(lib);

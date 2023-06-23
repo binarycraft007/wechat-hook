@@ -120,7 +120,15 @@ pub fn getUserInfo(self: *WeChat) !UserInfo {
     };
 }
 
-pub fn getContactByName(self: *WeChat, name: []const u8) ![]const u8 {
+const GetContactOptions = struct {
+    name: []const u8,
+    match: enum {
+        exact,
+        partial,
+    },
+};
+
+pub fn getContact(self: *WeChat, options: GetContactOptions) ![]const u8 {
     var base_ptr = try self.getAddrByTag(.{ .contact_base = .active });
     var base = @ptrFromInt(*usize, base_ptr).*;
     var head = @ptrFromInt(*usize, base + self.off_sets.contact_head).*;
@@ -145,9 +153,20 @@ pub fn getContactByName(self: *WeChat, name: []const u8) ![]const u8 {
         };
         defer self.gpa.free(contact_name);
 
-        if (mem.eql(u8, contact_name, name)) {
-            const id = mem.span(contact.id);
-            return try std.unicode.utf16leToUtf8Alloc(self.gpa, id);
+        switch (options.match) {
+            .exact => if (mem.eql(u8, contact_name, options.name)) {
+                const id = mem.span(contact.id);
+                return try std.unicode.utf16leToUtf8Alloc(self.gpa, id);
+            },
+            .partial => if (mem.containsAtLeast(
+                u8,
+                contact_name,
+                1,
+                options.name,
+            )) {
+                const id = mem.span(contact.id);
+                return try std.unicode.utf16leToUtf8Alloc(self.gpa, id);
+            },
         }
     }
 

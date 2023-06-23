@@ -1,5 +1,7 @@
 const std = @import("std");
 const os = std.os;
+const mem = std.mem;
+const httpz = @import("httpz");
 const windows = os.windows;
 const log_root = @import("log.zig");
 const WeChat = @import("WeChat.zig");
@@ -61,7 +63,7 @@ pub export fn DllMain(
             thread = std.Thread.spawn(
                 .{},
                 botMainThread,
-                .{},
+                .{std.heap.c_allocator},
             ) catch |err| {
                 log.err("spawn wechat bot {}", .{err});
                 return windows.FALSE;
@@ -78,8 +80,8 @@ pub export fn DllMain(
     return windows.TRUE;
 }
 
-fn botMainThread() void {
-    log.info("thread started in dll main", .{});
+fn botMainThread(allocator: mem.Allocator) void {
+    log.info("bot started in dll main", .{});
 
     while (!wechat.isLoggedIn()) {
         std.time.sleep(1 * std.time.ns_per_s);
@@ -93,19 +95,66 @@ fn botMainThread() void {
         log.info("mobile: {s}", .{info.mobile});
     }
 
-    while (true) {
-        std.time.sleep(3 * std.time.ns_per_s);
-        var id = wechat.getContactByName("Emma") catch
-            continue;
-        defer wechat.gpa.free(id);
+    var server = httpz.Server().init(
+        allocator,
+        .{ .port = 8080, .address = "127.0.0.1" },
+    ) catch |err| {
+        log.err("init http server {}", .{err});
+        return;
+    };
 
-        wechat.sendTextMsg(.{
-            .at_users = &[_][]const u8{""},
-            .to_user = id,
-            .message = "hello from wechat bot",
-        }) catch |err| {
-            log.err("send msg: {}", .{err});
-            continue;
-        };
-    }
+    var router = server.router();
+    router.post("/api/sendmsg", sendMsg);
+    router.get("/api/healthcheck", healthCheck);
+    server.listen() catch |err| {
+        log.err("http server listen {}", .{err});
+        return;
+    };
+}
+
+fn sendMsg(req: *httpz.Request, res: *httpz.Response) !void {
+    var sendmsg_req_maybe = try req.json(struct {
+        TextMsg: []const u8,
+        NickName: []const u8,
+    });
+
+    var sendmsg_req = blk: {
+        if (sendmsg_req_maybe) |sendmsg_req| {
+            break :blk sendmsg_req;
+        }
+        return error.ParseSendMsgRequest;
+    };
+
+    var nick_name = blk: {
+        if (sendmsg_req.NickName.len > 0) {
+            break :blk sendmsg_req.NickName;
+        }
+        return error.EmptyNickName;
+    };
+
+    var text_msg = blk: {
+        if (sendmsg_req.TextMsg.len > 0) {
+            break :blk sendmsg_req.TextMsg;
+        }
+        return error.EmptyTextMsg;
+    };
+
+    var id = try wechat.getContact(.{
+        .name = nick_name,
+        .match = .partial,
+    });
+    defer wechat.gpa.free(id);
+
+    try wechat.sendTextMsg(.{
+        .at_users = &[_][]const u8{""},
+        .to_user = id,
+        .message = text_msg,
+    });
+
+    try res.json(.{ .message = "success" }, .{});
+}
+
+fn healthCheck(req: *httpz.Request, res: *httpz.Response) !void {
+    _ = req;
+    try res.json(.{ .message = "success" }, .{});
 }

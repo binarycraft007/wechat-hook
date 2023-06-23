@@ -1,0 +1,10 @@
+.{
+    .name = "wechat-hook",
+    .version = "0.0.1",
+    .dependencies = .{
+        .httpz = .{
+            .url = "https://github.com/karlseguin/http.zig/archive/336e60d2804ceceed76524413039e37207c02512.tar.gz",
+            .hash = "122084e2185f3a6910d712ada87dee147c0a0aba33f1124409bdadcb4d258049c54b",
+        },
+    },
+}

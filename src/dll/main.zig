@@ -42,16 +42,28 @@ pub export fn DllMain(
                 .off_sets = .{
                     .send_msg = 0x521D30,
                     .nick_name = 0x23660F4,
+                    .user_id = 0x236607C,
+                    .mobile = 0x2366128,
                     .logged_in = 0x2366538,
+                    .contact_base = 0x23668F4,
+                    .contact_head = 0x4C,
+                    .contact_id = 0x30,
+                    .contact_code = 0x44,
+                    .contact_remark = 0x78,
+                    .contact_name = 0x8C,
+                    .contact_gender = 0x184,
+                    .contact_country = 0x1D0,
+                    .contact_province = 0x1E4,
+                    .contact_city = 0x1F8,
                 },
             });
 
             thread = std.Thread.spawn(
                 .{},
-                testThreading,
+                botMainThread,
                 .{},
             ) catch |err| {
-                log.err("{}", .{err});
+                log.err("spawn wechat bot {}", .{err});
                 return windows.FALSE;
             };
         },
@@ -66,23 +78,34 @@ pub export fn DllMain(
     return windows.TRUE;
 }
 
-fn testThreading() void {
+fn botMainThread() void {
     log.info("thread started in dll main", .{});
+
+    while (!wechat.isLoggedIn()) {
+        std.time.sleep(1 * std.time.ns_per_s);
+    }
+
+    var user_info = wechat.getUserInfo() catch null;
+
+    if (user_info) |info| {
+        log.info("user_id: {s}", .{info.user_id});
+        log.info("nick_name: {s}", .{info.nick_name});
+        log.info("mobile: {s}", .{info.mobile});
+    }
+
     while (true) {
         std.time.sleep(3 * std.time.ns_per_s);
-        if (!wechat.isLoggedIn()) continue;
+        var id = wechat.getContactByName("Emma") catch
+            continue;
+        defer wechat.gpa.free(id);
 
-        log.info("send msg start", .{});
         wechat.sendTextMsg(.{
             .at_users = &[_][]const u8{""},
-            .to_user = "filehelper",
+            .to_user = id,
             .message = "hello from wechat bot",
         }) catch |err| {
             log.err("send msg: {}", .{err});
             continue;
         };
-        log.info("send msg end", .{});
     }
 }
-
-test "basic add functionality" {}

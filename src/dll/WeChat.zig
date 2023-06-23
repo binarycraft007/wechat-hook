@@ -11,12 +11,49 @@ off_sets: OffSets,
 const WeChat = @This();
 const OffSets = struct {
     send_msg: usize,
-    nick_name: usize,
     logged_in: usize,
+    user_id: usize,
+    nick_name: usize,
+    mobile: usize,
+    contact_base: usize,
+    contact_head: usize,
+    contact_id: usize,
+    contact_code: usize,
+    contact_remark: usize,
+    contact_name: usize,
+    contact_country: usize,
+    contact_province: usize,
+    contact_city: usize,
+    contact_gender: usize,
 };
 
+pub const Contact = struct {
+    id: [*:0]const u16,
+    code: [*:0]const u16,
+    remark: [*:0]const u16,
+    name: [*:0]const u16,
+    country: [*:0]const u16,
+    province: [*:0]const u16,
+    city: [*:0]const u16,
+    gender: *usize,
+};
+
+pub const UserInfo = struct {
+    user_id: [*:0]const u8,
+    nick_name: [*:0]const u8,
+    mobile: [*:0]const u8,
+};
+
+const SendTextMessageOptions = extern struct {
+    id: [*c]const windows.WCHAR,
+    msg: [*c]const windows.WCHAR,
+    addr: windows.DWORD,
+};
+
+extern fn sendTextMessage(options: SendTextMessageOptions) void;
+
 pub const String = extern struct {
-    text: [*:0]windows.WCHAR,
+    text: [*c]const windows.WCHAR,
     size: windows.DWORD,
     capacity: windows.DWORD,
     padding: [8]u8 = [1]u8{0} ** 8,
@@ -25,12 +62,12 @@ pub const String = extern struct {
         return .{
             .text = try std.unicode.utf8ToUtf16LeWithNull(gpa, str),
             .size = str.len,
-            .capacity = str.len,
+            .capacity = str.len * 2,
         };
     }
 
     pub fn deinit(self: *String, gpa: mem.Allocator) void {
-        gpa.free(mem.span(self.text));
+        if (self.text) |text| gpa.free(mem.span(text));
     }
 };
 
@@ -42,8 +79,10 @@ const PointerUnion = union(enum) {
         at_users: [*c]const String,
         num: usize,
     ) callconv(.C) void,
-    nick_name: [*:0]const u8,
     logged_in: *bool,
+    user_id: *usize,
+    nick_name: [*:0]const u8,
+    mobile: [*:0]const u8,
 };
 
 const InitOptions = struct {
@@ -72,30 +111,95 @@ pub fn isLoggedIn(self: *WeChat) bool {
     return ptr.*;
 }
 
-pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
-    var buf: [0x3B0:0]u8 = [1:0]u8{0} ** 0x3B0;
-
-    var func_ptr = try self.getPtrByTag(.{ .send_msg = undefined });
-    log.info("function ptr: {p}", .{func_ptr});
-
-    var at_users = blk: {
-        var list = std.ArrayList(String).init(self.gpa);
-        for (options.at_users) |user| {
-            var str = try String.init(self.gpa, user);
-            defer str.deinit(self.gpa);
-            try list.append(str);
-        }
-        break :blk try list.toOwnedSlice();
+pub fn getUserInfo(self: *WeChat) !UserInfo {
+    var ptr = try self.getPtrByTag(.{ .user_id = undefined });
+    return .{
+        .user_id = @ptrFromInt([*:0]const u8, ptr.*),
+        .nick_name = try self.getPtrByTag(.{ .nick_name = undefined }),
+        .mobile = try self.getPtrByTag(.{ .mobile = undefined }),
     };
-    defer self.gpa.free(at_users);
+}
 
-    var to_user = try String.init(self.gpa, options.to_user);
-    defer to_user.deinit(self.gpa);
+pub fn getContactByName(self: *WeChat, name: []const u8) ![]const u8 {
+    var base_ptr = try self.getAddrByTag(.{ .contact_base = .active });
+    var base = @ptrFromInt(*usize, base_ptr).*;
+    var head = @ptrFromInt(*usize, base + self.off_sets.contact_head).*;
+    var index = @ptrFromInt(*usize, head).*;
 
-    var message = try String.init(self.gpa, options.message);
-    defer message.deinit(self.gpa);
+    while (index != head) {
+        defer index = @ptrFromInt(*usize, index).*;
 
-    func_ptr(&buf, &to_user, &message, at_users.ptr, 0x01);
+        var contact: Contact = undefined;
+        inline for (@typeInfo(@TypeOf(contact)).Struct.fields) |field| {
+            const FieldType = @TypeOf(@field(contact, field.name));
+            var ptr = @ptrFromInt(
+                *usize,
+                index + @field(self.off_sets, "contact_" ++ field.name),
+            );
+            @field(contact, field.name) = @ptrFromInt(FieldType, ptr.*);
+        }
+
+        var contact_name = blk: {
+            const n = mem.span(contact.name);
+            break :blk try std.unicode.utf16leToUtf8Alloc(self.gpa, n);
+        };
+        defer self.gpa.free(contact_name);
+
+        if (mem.eql(u8, contact_name, name)) {
+            const id = mem.span(contact.id);
+            return try std.unicode.utf16leToUtf8Alloc(self.gpa, id);
+        }
+    }
+
+    return error.ContactNotFound;
+}
+
+pub fn sendTextMsg(self: *WeChat, options: SendMsgOptions) !void {
+    var func_addr = try self.getAddrByTag(.{ .send_msg = undefined });
+
+    var to_user: [*c]windows.WCHAR = undefined;
+    defer self.gpa.free(mem.span(to_user));
+
+    var message: [*c]windows.WCHAR = undefined;
+    defer self.gpa.free(mem.span(message));
+
+    sendTextMessage(.{
+        .id = blk: {
+            to_user = try std.unicode.utf8ToUtf16LeWithNull(
+                self.gpa,
+                options.to_user,
+            );
+            break :blk to_user;
+        },
+        .msg = blk: {
+            message = try std.unicode.utf8ToUtf16LeWithNull(
+                self.gpa,
+                options.message,
+            );
+            break :blk message;
+        },
+        .addr = func_addr,
+    });
+}
+
+fn getAddrByTag(self: *WeChat, fields: anytype) !usize {
+    var dll_name = try std.unicode.utf8ToUtf16LeWithNull(
+        self.gpa,
+        self.dll_name,
+    );
+    defer self.gpa.free(dll_name);
+
+    var handle = blk: {
+        if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
+            break :blk handle;
+        }
+        return error.GetWeChatWinHandle;
+    };
+
+    const handle_addr = @intFromPtr(handle);
+    inline for (@typeInfo(@TypeOf(fields)).Struct.fields) |field| {
+        return handle_addr + @field(self.off_sets, field.name);
+    }
 }
 
 fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
@@ -105,7 +209,7 @@ fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
     );
     defer self.gpa.free(dll_name);
 
-    var dll_handle = blk: {
+    var handle = blk: {
         if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
             break :blk handle;
         }
@@ -115,7 +219,7 @@ fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
     switch (ptr) {
         inline else => |p, tag| {
             const offset = @field(self.off_sets, @tagName(tag));
-            return @ptrFromInt(@TypeOf(p), @intFromPtr(dll_handle) + offset);
+            return @ptrFromInt(@TypeOf(p), @intFromPtr(handle) + offset);
         },
     }
 }

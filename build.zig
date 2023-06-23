@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    var winapi_module = b.addModule(
+    const winapi_module = b.addModule(
         "winapi",
         .{ .source_file = .{ .path = "lib/winapi.zig" } },
     );
@@ -15,6 +15,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib.addCSourceFiles(
+        &[_][]const u8{"src/dll/WeChat.cpp"},
+        &[_][]const u8{
+            "-fasm-blocks", // enable clang msvc style asm
+            "-DWIN32_LEAN_AND_MEAN", // exclude headers
+        },
+    );
+    lib.linkLibCpp();
     lib.linkLibC();
     b.installArtifact(lib);
 

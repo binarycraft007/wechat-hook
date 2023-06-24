@@ -120,12 +120,8 @@ fn sendMsg(req: *httpz.Request, res: *httpz.Response) !void {
         NickName: []const u8,
     });
 
-    var sendmsg_req = blk: {
-        if (sendmsg_req_maybe) |sendmsg_req| {
-            break :blk sendmsg_req;
-        }
+    var sendmsg_req = sendmsg_req_maybe orelse
         return error.ParseSendMsgRequest;
-    };
 
     var nick_name = blk: {
         if (sendmsg_req.NickName.len > 0) {

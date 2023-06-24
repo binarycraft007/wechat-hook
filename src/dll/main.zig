@@ -103,6 +103,8 @@ fn botMainThread(allocator: mem.Allocator) void {
         return;
     };
 
+    server.errorHandler(errorHandler);
+
     var router = server.router();
     router.post("/api/sendmsg", sendMsg);
     router.get("/api/healthcheck", healthCheck);
@@ -157,4 +159,23 @@ fn sendMsg(req: *httpz.Request, res: *httpz.Response) !void {
 fn healthCheck(req: *httpz.Request, res: *httpz.Response) !void {
     _ = req;
     try res.json(.{ .message = "success" }, .{});
+}
+
+// note that the error handler return `void` and not `!void`
+fn errorHandler(req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
+    switch (err) {
+        error.EmptyTextMsg, error.EmptyNickName, error.ParseSendMsgRequest => {
+            res.status = 400;
+            res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
+        },
+        error.ContactNotFound => {
+            res.status = 404;
+            res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
+        },
+        else => {
+            res.status = 500;
+            res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
+        },
+    }
+    std.log.warn("request: {s}\nErr: {}", .{ req.url.raw, err });
 }

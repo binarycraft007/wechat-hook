@@ -28,14 +28,14 @@ const OffSets = struct {
 };
 
 pub const Contact = struct {
-    id: [*:0]const u16,
-    code: [*:0]const u16,
-    remark: [*:0]const u16,
-    name: [*:0]const u16,
-    country: [*:0]const u16,
-    province: [*:0]const u16,
-    city: [*:0]const u16,
-    gender: *usize,
+    id: ?[*:0]const u16,
+    code: ?[*:0]const u16,
+    remark: ?[*:0]const u16,
+    name: ?[*:0]const u16,
+    country: ?[*:0]const u16,
+    province: ?[*:0]const u16,
+    city: ?[*:0]const u16,
+    gender: ?*usize,
 };
 
 pub const UserInfo = struct {
@@ -148,14 +148,14 @@ pub fn getContact(self: *WeChat, options: GetContactOptions) ![]const u8 {
         }
 
         var contact_name = blk: {
-            const n = mem.span(contact.name);
+            const n = mem.span(contact.name) orelse continue;
             break :blk try std.unicode.utf16leToUtf8Alloc(self.gpa, n);
         };
         defer self.gpa.free(contact_name);
 
         switch (options.match) {
             .exact => if (mem.eql(u8, contact_name, options.name)) {
-                const id = mem.span(contact.id);
+                const id = mem.span(contact.id) orelse continue;
                 return try std.unicode.utf16leToUtf8Alloc(self.gpa, id);
             },
             .partial => if (mem.containsAtLeast(
@@ -164,7 +164,7 @@ pub fn getContact(self: *WeChat, options: GetContactOptions) ![]const u8 {
                 1,
                 options.name,
             )) {
-                const id = mem.span(contact.id);
+                const id = mem.span(contact.id) orelse continue;
                 return try std.unicode.utf16leToUtf8Alloc(self.gpa, id);
             },
         }

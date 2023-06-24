@@ -122,10 +122,7 @@ pub fn getUserInfo(self: *WeChat) !UserInfo {
 
 const GetContactOptions = struct {
     name: []const u8,
-    match: enum {
-        exact,
-        partial,
-    },
+    match: enum { exact, partial },
 };
 
 pub fn getContact(self: *WeChat, options: GetContactOptions) ![]const u8 {
@@ -208,12 +205,8 @@ fn getAddrByTag(self: *WeChat, fields: anytype) !usize {
     );
     defer self.gpa.free(dll_name);
 
-    var handle = blk: {
-        if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
-            break :blk handle;
-        }
+    var handle = windows.kernel32.GetModuleHandleW(dll_name) orelse
         return error.GetWeChatWinHandle;
-    };
 
     const handle_addr = @intFromPtr(handle);
     inline for (@typeInfo(@TypeOf(fields)).Struct.fields) |field| {
@@ -228,12 +221,8 @@ fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
     );
     defer self.gpa.free(dll_name);
 
-    var handle = blk: {
-        if (windows.kernel32.GetModuleHandleW(dll_name)) |handle| {
-            break :blk handle;
-        }
+    var handle = windows.kernel32.GetModuleHandleW(dll_name) orelse
         return error.GetWeChatWinHandle;
-    };
 
     switch (ptr) {
         inline else => |p, tag| {

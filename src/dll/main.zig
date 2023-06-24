@@ -120,33 +120,25 @@ fn sendMsg(req: *httpz.Request, res: *httpz.Response) !void {
         NickName: []const u8,
     });
 
-    var sendmsg_req = sendmsg_req_maybe orelse
-        return error.ParseSendMsgRequest;
+    var sendmsg_req = sendmsg_req_maybe orelse return error.ParseRequest;
 
-    var nick_name = blk: {
-        if (sendmsg_req.NickName.len > 0) {
-            break :blk sendmsg_req.NickName;
-        }
+    var name = blk: {
+        if (sendmsg_req.NickName.len > 0) break :blk sendmsg_req.NickName;
         return error.EmptyNickName;
     };
 
-    var text_msg = blk: {
-        if (sendmsg_req.TextMsg.len > 0) {
-            break :blk sendmsg_req.TextMsg;
-        }
+    var msg = blk: {
+        if (sendmsg_req.TextMsg.len > 0) break :blk sendmsg_req.TextMsg;
         return error.EmptyTextMsg;
     };
 
-    var id = try wechat.getContact(.{
-        .name = nick_name,
-        .match = .partial,
-    });
+    var id = try wechat.getContact(.{ .name = name, .match = .partial });
     defer wechat.gpa.free(id);
 
     try wechat.sendTextMsg(.{
         .at_users = &[_][]const u8{""},
         .to_user = id,
-        .message = text_msg,
+        .message = msg,
     });
 
     try res.json(.{ .message = "success" }, .{});
@@ -160,7 +152,7 @@ fn healthCheck(req: *httpz.Request, res: *httpz.Response) !void {
 // note that the error handler return `void` and not `!void`
 fn errorHandler(req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
     switch (err) {
-        error.EmptyTextMsg, error.EmptyNickName, error.ParseSendMsgRequest => {
+        error.EmptyTextMsg, error.EmptyNickName, error.ParseRequest => {
             res.status = 400; // user input parameter releated error
         },
         error.ContactNotFound => {

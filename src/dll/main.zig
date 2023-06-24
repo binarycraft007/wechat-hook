@@ -161,17 +161,15 @@ fn healthCheck(req: *httpz.Request, res: *httpz.Response) !void {
 fn errorHandler(req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
     switch (err) {
         error.EmptyTextMsg, error.EmptyNickName, error.ParseSendMsgRequest => {
-            res.status = 400;
-            res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
+            res.status = 400; // user input parameter releated error
         },
         error.ContactNotFound => {
-            res.status = 404;
-            res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
+            res.status = 404; // failed to find contacts in getcontact step
         },
         else => {
-            res.status = 500;
-            res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
+            res.status = 500; // internal server error, mem allocation, etc
         },
     }
+    res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
     std.log.warn("request: {s}\nErr: {}", .{ req.url.raw, err });
 }

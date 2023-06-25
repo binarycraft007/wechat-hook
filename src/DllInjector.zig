@@ -173,7 +173,7 @@ pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
     };
     log.info("{s} injection success!", .{self.dll_path});
 
-    _ = windows.kernel32.WaitForSingleObject(thread_handle, 4000);
+    try windows.WaitForSingleObject(thread_handle, 4000);
     _ = winapi.ResumeThread(self.proc_info.hThread);
 }
 
@@ -182,7 +182,6 @@ pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {
         windows.TH32CS_SNAPPROCESS,
         0,
     );
-
     if (handle == windows.INVALID_HANDLE_VALUE) {
         switch (windows.kernel32.GetLastError()) {
             else => |err| return windows.unexpectedError(err),
@@ -202,11 +201,11 @@ pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {
     while (true) {
         var process_name = try unicode.utf16leToUtf8Alloc(
             gpa,
-            &process_entry.szExeFile,
+            mem.sliceTo(&process_entry.szExeFile, 0),
         );
         defer gpa.free(process_name);
 
-        if (mem.containsAtLeast(u8, process_name, 1, self.target_name)) {
+        if (mem.eql(u8, process_name, self.target_name)) {
             var process_handle = winapi.OpenProcess(
                 winapi.PROCESS_TERMINATE,
                 windows.FALSE,
@@ -220,6 +219,8 @@ pub fn closeProcess(self: *DllInjector, gpa: mem.Allocator) !void {
             defer windows.CloseHandle(process_handle);
 
             try windows.TerminateProcess(process_handle, 0);
+            std.time.sleep(500 * std.time.ns_per_ms);
+            break;
         }
 
         if (winapi.Process32NextW(handle, &process_entry) != windows.TRUE) {

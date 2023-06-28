@@ -114,7 +114,7 @@ pub fn isLoggedIn(self: *WeChat) bool {
 pub fn getUserInfo(self: *WeChat) !UserInfo {
     var ptr = try self.getPtrByTag(.{ .user_id = undefined });
     return .{
-        .user_id = @ptrFromInt([*:0]const u8, ptr.*),
+        .user_id = @ptrFromInt(ptr.*),
         .nick_name = try self.getPtrByTag(.{ .nick_name = undefined }),
         .mobile = try self.getPtrByTag(.{ .mobile = undefined }),
     };
@@ -127,21 +127,19 @@ const GetContactOptions = struct {
 
 pub fn getContact(self: *WeChat, options: GetContactOptions) ![]const u8 {
     var base_ptr = try self.getAddrByTag(.{ .contact_base = .active });
-    var base = @ptrFromInt(*usize, base_ptr).*;
-    var head = @ptrFromInt(*usize, base + self.off_sets.contact_head).*;
-    var index = @ptrFromInt(*usize, head).*;
+    var base = @as(*usize, @ptrFromInt(base_ptr)).*;
+    var head = @as(*usize, @ptrFromInt(base + self.off_sets.contact_head)).*;
+    var index = @as(*usize, @ptrFromInt(head)).*;
 
     while (index != head) {
-        defer index = @ptrFromInt(*usize, index).*;
+        defer index = @as(*usize, @ptrFromInt(index)).*;
 
         var contact: Contact = undefined;
         inline for (@typeInfo(@TypeOf(contact)).Struct.fields) |field| {
-            const FieldType = @TypeOf(@field(contact, field.name));
-            var ptr = @ptrFromInt(
-                *usize,
-                index + @field(self.off_sets, "contact_" ++ field.name),
-            );
-            @field(contact, field.name) = @ptrFromInt(FieldType, ptr.*);
+            const off = @field(self.off_sets, "contact_" ++ field.name);
+            const ptr_addr = index + off;
+            var ptr: *usize = @ptrFromInt(ptr_addr);
+            @field(contact, field.name) = @ptrFromInt(ptr.*);
         }
 
         var contact_name = blk: {
@@ -225,9 +223,9 @@ fn getPtrByTag(self: *WeChat, comptime ptr: PointerUnion) !ActiveType(ptr) {
         return error.GetWeChatWinHandle;
 
     switch (ptr) {
-        inline else => |p, tag| {
+        inline else => |_, tag| {
             const offset = @field(self.off_sets, @tagName(tag));
-            return @ptrFromInt(@TypeOf(p), @intFromPtr(handle) + offset);
+            return @ptrFromInt(@intFromPtr(handle) + offset);
         },
     }
 }

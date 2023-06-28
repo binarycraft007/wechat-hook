@@ -69,17 +69,17 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
         query,
         null,
         null,
-        @ptrCast(*windows.BYTE, result.ptr),
-        @constCast(&@intCast(u32, result.len)),
+        @ptrCast(result.ptr),
+        @constCast(&@as(u32, @intCast(result.len))),
     ) != 0) {
         return error.QueryRegValue;
     }
 
     var result_utf8 = try unicode.utf16leToUtf8Alloc(
         gpa,
-        mem.span(@ptrCast(
+        mem.span(@as(
             [*:0]u16,
-            @alignCast(@alignOf([*:0]u16), result.ptr),
+            @ptrCast(@alignCast(result.ptr)),
         )),
     );
     defer gpa.free(result_utf8);
@@ -126,7 +126,7 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 }
 
 pub fn inject(self: *DllInjector, gpa: mem.Allocator) !void {
-    var dll_path = try std.cstr.addNullByte(gpa, self.dll_path);
+    var dll_path = try gpa.dupeZ(u8, self.dll_path);
     defer gpa.free(dll_path);
 
     const mem_ptr = winapi.VirtualAllocEx(

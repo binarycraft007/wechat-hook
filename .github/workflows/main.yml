@@ -1,0 +1,22 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+concurrency:
+  # Cancels pending runs when a PR gets updated.
+  group: ${{ github.head_ref || github.run_id }}-${{ github.actor }}
+  cancel-in-progress: true
+jobs:
+  x86-windows-debug:
+    timeout-minutes: 420
+    runs-on: "ubuntu-latest"
+    env:
+      zig_version: "0.11.0-dev.4404+4f6013bf5"
+      command: "zig build -Dtarget=x86-windows"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build
+        run: ci/x86_64-linux-debug.sh

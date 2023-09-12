@@ -1,0 +1,27 @@
+# .github/workflows/release.yaml
+
+on:
+  release:
+    types: [created]
+
+permissions:
+    contents: write
+    packages: write
+
+jobs:
+  x86_64-windows-release-fast:
+    timeout-minutes: 420
+    runs-on: "ubuntu-latest"
+    env:
+      zig_version: "0.12.0-dev.82+2ceeade99"
+      command: "zig build -Dtarget=x86_64-windows -Doptimize=ReleaseFast"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build
+        run: |
+          wget -O ghr.tar.gz https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz
+          tar -xvf ghr.tar.gz
+          mv ghr*linux_amd64/ghr .
+          ci/x86_64-linux-debug.sh
+          ./ghr -t "${{ github.token }}" -n "${{ github.event.release.tag_name }}" "${{ github.event.release.tag_name }}" zig-out/bin

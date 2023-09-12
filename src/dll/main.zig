@@ -42,21 +42,12 @@ pub export fn DllMain(
                 .gpa = std.heap.c_allocator,
                 .dll_name = "WeChatWin.dll",
                 .off_sets = .{
-                    .send_msg = 0x521D30,
-                    .nick_name = 0x23660F4,
-                    .user_id = 0x236607C,
-                    .mobile = 0x2366128,
-                    .logged_in = 0x2366538,
-                    .contact_base = 0x23668F4,
-                    .contact_head = 0x4C,
-                    .contact_id = 0x30,
-                    .contact_code = 0x44,
-                    .contact_remark = 0x78,
-                    .contact_name = 0x8C,
-                    .contact_gender = 0x184,
-                    .contact_country = 0x1D0,
-                    .contact_province = 0x1E4,
-                    .contact_city = 0x1F8,
+                    .account_mgr = 0x8c1230,
+                    .send_msg_mgr = 0x8c00e0,
+                    .send_text_msg = 0xfcd8d0,
+                    .free_chat_msg = 0x8aaa00,
+                    .contact_mgr = 0x8ae3d0,
+                    .contact_list = 0xeab270,
                 },
             });
 
@@ -91,13 +82,13 @@ fn botMainThread(allocator: mem.Allocator) void {
 
     if (user_info) |info| {
         log.info("user_id: {s}", .{info.user_id});
-        log.info("nick_name: {s}", .{info.nick_name});
-        log.info("mobile: {s}", .{info.mobile});
+        //log.info("nick_name: {s}", .{info.nick_name});
+        //log.info("mobile: {s}", .{info.mobile});
     }
 
     var server = httpz.Server().init(
         allocator,
-        .{ .port = 8080, .address = "127.0.0.1" },
+        .{ .port = 8080, .address = "0.0.0.0" },
     ) catch |err| {
         log.err("init http server {}", .{err});
         return;
@@ -135,12 +126,7 @@ fn sendMsg(req: *httpz.Request, res: *httpz.Response) !void {
     var id = try wechat.getContact(.{ .name = name, .match = .partial });
     defer wechat.gpa.free(id);
 
-    try wechat.sendTextMsg(.{
-        .at_users = &[_][]const u8{""},
-        .to_user = id,
-        .message = msg,
-    });
-
+    try wechat.sendTextMsg(.{ .to_user = id, .message = msg });
     try res.json(.{ .message = "success" }, .{});
 }
 
@@ -163,5 +149,11 @@ fn errorHandler(req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
         },
     }
     res.json(.{ .message = @errorName(err) }, .{}) catch unreachable;
-    std.log.warn("request: {s}\nErr: {}", .{ req.url.raw, err });
+    std.log.warn("request: {s}, Err: {}", .{ req.url.raw, err });
+}
+
+pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    @setCold(true);
+    std.log.scoped(.panic).err("{s}", .{msg});
+    while (true) @breakpoint();
 }

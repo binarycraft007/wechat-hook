@@ -52,7 +52,6 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
     ) != 0) {
         return error.OpenRegKey;
     }
-    errdefer _ = windows.advapi32.RegCloseKey(hkey);
     defer _ = windows.advapi32.RegCloseKey(hkey);
 
     var result = try gpa.alloc(windows.BYTE, windows.MAX_PATH);
@@ -92,7 +91,7 @@ pub fn startProcess(self: *DllInjector, gpa: mem.Allocator) !void {
 
     self.dll_path = try std.fs.path.join(gpa, &[_][]const u8{
         result_utf8,
-        "[3.7.0.30]",
+        "[3.9.5.81]",
         "wechat-helper.dll",
     });
     log.info("dll_path: {s}", .{self.dll_path});
